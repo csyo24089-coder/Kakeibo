@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>家計簿アプリ</title>
+    <style>
+        :root {
+            --primary-color: #4CAF50;
+            --danger-color: #f44336;
+            --bg-color: #f4f7f6;
+            --text-color: #333;
+        }
+        body {
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        h1, h2 {
+            text-align: center;
+            color: #2c3e50;
+        }
+        .card {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input[type="number"], input[type="text"], input[type="date"], input[type="month"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            width: 100%;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .report-summary {
+            display: flex;
+            justify-content: space-between;
+            background: #e8f5e9;
+            padding: 15px;
+            border-radius: 4px;
+            font-size: 1.2em;
+            font-weight: bold;
+        }
+        .balance {
+            color: var(--primary-color);
+        }
+        .balance.negative {
+            color: var(--danger-color);
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        th, td {
+            text-align: left;
+            padding: 12px;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        .delete-btn {
+            background-color: var(--danger-color);
+            padding: 5px 10px;
+            font-size: 12px;
+            width: auto;
+        }
+        .delete-btn:hover {
+            background-color: #da190b;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>家計簿アプリ</h1>
+
+    <div class="card">
+        <h2>月の設定・収入</h2>
+        <div class="form-group">
+            <label for="month-select">対象月を選択:</label>
+            <input type="month" id="month-select">
+        </div>
+        <div class="form-group">
+            <label for="income-input">今月の収入 (円):</label>
+            <input type="number" id="income-input" placeholder="例: 250000">
+        </div>
+        <button onclick="saveIncome()">収入を反映</button>
+    </div>
+
+    <div class="card">
+        <h2>出費の記録</h2>
+        <div class="form-group">
+            <label for="expense-date">日付 (カレンダー連動):</label>
+            <input type="date" id="expense-date">
+        </div>
+        <div class="form-group">
+            <label for="expense-name">項目:</label>
+            <input type="text" id="expense-name" placeholder="例: 食費">
+        </div>
+        <div class="form-group">
+            <label for="expense-amount">金額 (円):</label>
+            <input type="number" id="expense-amount" placeholder="例: 1500">
+        </div>
+        <button onclick="addExpense()">出費を記録</button>
+    </div>
+
+    <div class="card">
+        <h2>支出レポート</h2>
+        <div class="report-summary">
+            <span>収入: <span id="display-income">0</span>円</span>
+            <span>支出: <span id="display-expense">0</span>円</span>
+            <span>残金: <span id="display-balance" class="balance">0</span>円</span>
+        </div>
+        
+        <table id="expense-table">
+            <thead>
+                <tr>
+                    <th>日付</th>
+                    <th>項目</th>
+                    <th>金額</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody id="expense-list">
+                </tbody>
+        </table>
+    </div>
+
+    <script>
+        // 現在の年月を初期セット
+        const monthSelect = document.getElementById('month-select');
+        const today = new Date();
+        const currentMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+        monthSelect.value = currentMonth;
+
+        // 今日の日付を初期セット
+        document.getElementById('expense-date').value = today.toISOString().split('T')[0];
+
+        // データ読み込みとUI更新
+        let appData = JSON.parse(localStorage.getItem('kakeiboData')) || {};
+
+        function initMonthData(month) {
+            if (!appData[month]) {
+                appData[month] = { income: 0, expenses: [] };
+            }
+        }
+
+        function saveIncome() {
+            const month = monthSelect.value;
+            const income = parseInt(document.getElementById('income-input').value) || 0;
+            
+            initMonthData(month);
+            appData[month].income = income;
+            saveData();
+            updateUI();
+        }
+
+        function addExpense() {
+            const date = document.getElementById('expense-date').value;
+            const name = document.getElementById('expense-name').value;
+            const amount = parseInt(document.getElementById('expense-amount').value);
+            const month = date.substring(0, 7); // YYYY-MMを取得
+
+            if (!date || !name || isNaN(amount)) {
+                alert("全ての項目を正しく入力してください。");
+                return;
+            }
+
+            initMonthData(month);
+            appData[month].expenses.push({ id: Date.now(), date, name, amount });
+            
+            // 入力フィールドをクリア
+            document.getElementById('expense-name').value = '';
+            document.getElementById('expense-amount').value = '';
+            
+            saveData();
+            if(monthSelect.value === month) {
+                updateUI();
+            } else {
+                monthSelect.value = month;
+                updateUI();
+            }
+        }
+
+        function deleteExpense(month, id) {
+            appData[month].expenses = appData[month].expenses.filter(exp => exp.id !== id);
+            saveData();
+            updateUI();
+        }
+
+        function saveData() {
+            localStorage.setItem('kakeiboData', JSON.stringify(appData));
+        }
+
+        function updateUI() {
+            const month = monthSelect.value;
+            initMonthData(month);
+            
+            const monthData = appData[month];
+            let totalExpense = 0;
+            
+            // 収入入力欄を更新
+            document.getElementById('income-input').value = monthData.income || '';
+
+            const tbody = document.getElementById('expense-list');
+            tbody.innerHTML = '';
+
+            // 日付順にソート
+            const sortedExpenses = monthData.expenses.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+            sortedExpenses.forEach(exp => {
+                totalExpense += exp.amount;
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${exp.date}</td>
+                    <td>${exp.name}</td>
+                    <td>${exp.amount.toLocaleString()}円</td>
+                    <td><button class="delete-btn" onclick="deleteExpense('${month}', ${exp.id})">削除</button></td>
+                `;
+                tbody.appendChild(row);
+            });
+
+            // レポートの数値を更新
+            const balance = monthData.income - totalExpense;
+            document.getElementById('display-income').textContent = monthData.income.toLocaleString();
+            document.getElementById('display-expense').textContent = totalExpense.toLocaleString();
+            
+            const balanceEl = document.getElementById('display-balance');
+            balanceEl.textContent = balance.toLocaleString();
+            
+            if (balance < 0) {
+                balanceEl.classList.add('negative');
+            } else {
+                balanceEl.classList.remove('negative');
+            }
+        }
+
+        // 月を変更した時にデータを再読み込み
+        monthSelect.addEventListener('change', updateUI);
+
+        // 初期表示
+        updateUI();
+    </script>
+</body>
+</html>
